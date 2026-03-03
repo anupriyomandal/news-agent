@@ -1,0 +1,10 @@
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+pydantic==2.11.7
+feedparser==6.0.11
+faiss-cpu==1.12.0
+numpy==2.3.2
+APScheduler==3.10.4
+openai==1.99.9
+python-dotenv==1.1.1
+requests==2.32.3
