@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .config import (
+    CORS_ORIGINS,
     ENABLE_INTERNAL_SCHEDULER,
     FRESH_SEARCH_ONLY,
     INGEST_API_TOKEN,
@@ -57,7 +58,7 @@ class TTLCache:
 app = FastAPI(title="Anupriyo Mandal's News Intelligence Engine")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

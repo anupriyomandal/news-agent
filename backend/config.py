@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 DATABASE_PATH = DATA_DIR / "news.db"
@@ -79,3 +79,6 @@ SEARCH_TOP_K = int(os.getenv("SEARCH_TOP_K", "20"))
 PIPELINE_MAX_ARTICLES = int(os.getenv("PIPELINE_MAX_ARTICLES", "12"))
 QUERY_CACHE_TTL_SECONDS = int(os.getenv("QUERY_CACHE_TTL_SECONDS", "600"))
 FRESH_SEARCH_ONLY = os.getenv("FRESH_SEARCH_ONLY", "true").lower() in {"1", "true", "yes", "on"}
+
+DEFAULT_CORS_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000"
+CORS_ORIGINS = [item.strip() for item in os.getenv("CORS_ORIGINS", DEFAULT_CORS_ORIGINS).split(",") if item.strip()]

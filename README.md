@@ -148,3 +148,59 @@ Example external scheduler command:
 curl -X POST https://your-api-domain/ingest/now \
   -H "Authorization: Bearer $INGEST_API_TOKEN"
 ```
+
+## Deploy: Railway (Backend) + Vercel (Frontend)
+
+### Do you need Docker for Railway?
+
+- Not strictly required (Railway can use Nixpacks), but for this project Docker is recommended.
+- Reason: deterministic Python/FAISS runtime and smoother deploy parity with local.
+- This repo now includes `Dockerfile`, `.dockerignore`, and `railway.json`.
+
+### Railway Backend Deployment
+
+1. Create a new Railway project from this GitHub repo.
+2. Ensure Railway service uses repo root (Dockerfile at root).
+3. Add a persistent volume and mount it to `/data`.
+4. Set Railway env vars:
+   - `OPENAI_API_KEY=...`
+   - `OPENAI_EMBEDDING_MODEL=text-embedding-3-small`
+   - `OPENAI_LLM_MODEL=gpt-5.2` (or your chosen model)
+   - `DATA_DIR=/data`
+   - `CORS_ORIGINS=https://<your-vercel-domain>`
+   - `SEARCH_TOP_K=20`
+   - `PIPELINE_MAX_ARTICLES=14`
+   - `FRESH_SEARCH_ONLY=true`
+   - `INGEST_API_TOKEN=<long-random-secret>`
+   - `ENABLE_INTERNAL_SCHEDULER=false` (recommended in production)
+   - `INGEST_ON_STARTUP=true`
+5. Deploy and copy your Railway public URL (example: `https://news-api.up.railway.app`).
+
+### Vercel Frontend Deployment
+
+1. Import the same repo in Vercel.
+2. Set root directory to `frontend`.
+3. Set env var in Vercel:
+   - `NEXT_PUBLIC_API_BASE=https://<your-railway-backend-domain>`
+4. Deploy.
+
+### Production Ingestion Scheduling
+
+Recommended:
+
+- Keep `ENABLE_INTERNAL_SCHEDULER=false` on Railway.
+- Use an external scheduler (GitHub Actions, cron, or cloud scheduler) to call:
+
+```bash
+curl -X POST https://<your-railway-backend-domain>/ingest/now \
+  -H "Authorization: Bearer <INGEST_API_TOKEN>"
+```
+
+- Frequency: every 10-15 minutes.
+
+Optional status check:
+
+```bash
+curl https://<your-railway-backend-domain>/ingest/status \
+  -H "Authorization: Bearer <INGEST_API_TOKEN>"
+```
