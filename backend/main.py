@@ -96,6 +96,10 @@ STOPWORDS = {
 }
 
 
+def _is_year_token(token: str) -> bool:
+    return bool(re.fullmatch(r"20\d{2}", token))
+
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -167,32 +171,67 @@ def _tokenize(text: str) -> list[str]:
     return [t for t in re.findall(r"[a-z0-9]+", text.lower()) if len(t) > 1]
 
 
+def _normalized_variants(term: str) -> set[str]:
+    variants = {term}
+    if term.endswith("s") and len(term) > 3:
+        variants.add(term[:-1])
+    else:
+        variants.add(f"{term}s")
+    return variants
+
+
+def _anchor_terms(query: str) -> list[str]:
+    terms = []
+    for token in _tokenize(query):
+        if token in STOPWORDS:
+            continue
+        if token.isdigit() or _is_year_token(token):
+            continue
+        terms.append(token)
+    return list(dict.fromkeys(terms))
+
+
 def _rank_relevant_articles(query: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    terms = [t for t in _tokenize(query) if t not in STOPWORDS]
+    terms = _anchor_terms(query)
     if not terms:
         return rows
 
-    scored: list[tuple[float, dict[str, Any], int, float]] = []
+    scored: list[tuple[float, dict[str, Any], int, float, bool]] = []
     total = max(len(rows), 1)
     for rank, row in enumerate(rows):
-        title = str(row.get("title") or "").lower()
-        description = str(row.get("description") or "").lower()
-        title_hits = sum(1 for term in terms if term in title)
-        desc_hits = sum(1 for term in terms if term in description)
-        hit_count = len({term for term in terms if term in (title + " " + description)})
+        title_tokens = set(_tokenize(str(row.get("title") or "")))
+        desc_tokens = set(_tokenize(str(row.get("description") or "")))
+        source_tokens = set(_tokenize(str(row.get("source") or "")))
+        combined = title_tokens | desc_tokens | source_tokens
+
+        matched_terms = {
+            term
+            for term in terms
+            if any(variant in combined for variant in _normalized_variants(term))
+        }
+        title_hits = sum(
+            1
+            for term in terms
+            if any(variant in title_tokens for variant in _normalized_variants(term))
+        )
+        desc_hits = sum(
+            1
+            for term in terms
+            if any(variant in desc_tokens for variant in _normalized_variants(term))
+        )
+        hit_count = len(matched_terms)
         coverage = hit_count / len(terms)
         lexical = (title_hits * 1.5 + desc_hits) / len(terms)
         semantic_rank_bonus = (total - rank) / total
         score = lexical + (coverage * 1.8) + (semantic_rank_bonus * 0.35)
-        scored.append((score, row, hit_count, coverage))
+        strict_match = (hit_count >= 1) if len(terms) <= 2 else (hit_count >= 2 or coverage >= 0.6)
+        scored.append((score, row, hit_count, coverage, strict_match))
 
-    min_hits = 1 if len(terms) <= 2 else 2
-    filtered = [item for item in scored if item[2] >= min_hits or item[3] >= 0.5]
+    filtered = [item for item in scored if item[4]]
     if not filtered:
-        filtered = sorted(scored, key=lambda item: item[0], reverse=True)[: max(4, min(len(scored), 8))]
-    else:
-        filtered = sorted(filtered, key=lambda item: item[0], reverse=True)
-    return [row for _, row, _, _ in filtered]
+        return []
+    filtered = sorted(filtered, key=lambda item: item[0], reverse=True)
+    return [row for _, row, _, _, _ in filtered]
 
 
 @app.on_event("startup")
@@ -282,7 +321,10 @@ def search(request: SearchRequest) -> SearchResponse:
         ranked = _rank_relevant_articles(query, rows)
         articles = ranked[:PIPELINE_MAX_ARTICLES]
         if not articles:
-            raise HTTPException(status_code=404, detail="No relevant articles found for this specific query.")
+            raise HTTPException(
+                status_code=404,
+                detail="No highly relevant articles found for this query. Try more specific keywords.",
+            )
         result = run_pipeline(query, articles)
 
         sources = []
