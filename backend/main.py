@@ -204,9 +204,8 @@ def on_startup() -> None:
         if not scheduler.running:
             scheduler.start()
     if INGEST_ON_STARTUP:
-        result = _run_ingestion("startup")
-        if result["status"] == "error":
-            print(f"[startup ingestion] failed: {result['detail']}")
+        # Do not block app startup on slow/unreachable RSS feeds.
+        threading.Thread(target=lambda: _run_ingestion("startup"), daemon=True).start()
 
 
 @app.on_event("shutdown")
